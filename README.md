@@ -10,8 +10,6 @@ The pipeline performs speaker diarization and recognition in a single command. H
 
 Dataset is an inhouse dataset consisting of over 392 Bundestag speakers with varying speaker duration from 30 seconds to 45 minutes.
 
-Dataset link: /nm-raid/audio/work/mturan/Bundestag_speaker_data/Recognition/
-
 ## Speaker Diarization
 
 Script to perform speaker diarization on an input WAV file using the VBx diarization system. It first uses voice activity detection (VAD) to segment the input audio file, computes speaker embeddings using a pre-trained x-vector model, and applies agglomerative hierarchical clustering (AHC) with a VBx hidden Markov model (HMM) to perform speaker diarization on the input audio file. Please call this script from the main folder directly.
