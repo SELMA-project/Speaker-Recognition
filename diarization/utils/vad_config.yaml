@@ -31,7 +31,7 @@ prepare_manifest:
   auto_split: True
 
   # Split duration in seconds (limited to 15 minutes because more may cause a out-of-memory error)
-  split_duration: 900
+  split_duration: 30
 
 # Configuration for voice activity detection (VAD)
 vad:
