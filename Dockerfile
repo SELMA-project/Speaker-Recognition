@@ -31,8 +31,8 @@ COPY retrain_classifier retrain_classifier
 COPY SpeakerRecWebservice.py ./
 COPY StartWebService.sh ./
 
-EXPOSE 9000/tcp
+EXPOSE 9002/tcp
 HEALTHCHECK \
   CMD python -c 'import requests; \
-      requests.post("http://localhost:9000/Speaker_ID").raise_for_status()'
+      requests.post("http://localhost:9002/Speaker_ID").raise_for_status()'
 ENTRYPOINT ["./StartWebService.sh"]

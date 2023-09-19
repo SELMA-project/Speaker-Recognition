@@ -25,8 +25,8 @@ class Retrain_classifier:
     def __init__(self, audio_file, label, audio_zip_files):
 
         self.nemo_model = EncDecSpeakerLabelModel.from_pretrained(model_name="titanet_large")
-        self.ML_embeddings = "./embeddings/nemo_large_model_embeddings.pkl"
-        self.Embeddings_list = pickle.load(open(self.ML_embeddings, 'rb'))
+        #self.ML_embeddings = "./embeddings/nemo_large_model_embeddings.pkl"
+        #self.Embeddings_list = pickle.load(open(self.ML_embeddings, 'rb'))
         self.Retrain_folder = os.path.join("./retrain_classifier", "retrain_folder")
         os.makedirs(self.Retrain_folder, exist_ok = True)
         self.Retrain_folder_zip = os.path.join("./retrain_classifier", "retrain_folder_zip")
@@ -34,9 +34,11 @@ class Retrain_classifier:
         self.wav_file = audio_file
         self.label = label.replace(" ", "_")
         self.wav_zip_files = audio_zip_files
-        self.Novelty_detector = "./models/Local_Outlier_Filter.pkl"
-        self.Speaker_classifier = "./models/KNN_auto_classifier.pkl"
+        #self.Novelty_detector = "./models/Local_Outlier_Filter.pkl"
+        #self.Speaker_classifier = "./models/KNN_auto_classifier.pkl"
+        self.Embeddings_list = pickle.load(open("./embeddings/nemo_large_model_enrollment_embeddings.pkl", 'rb'))
 
+    '''
     def Prepare_audio_chunks(self, audio_files):
 
         WINDOW_LENGTH_3sec = 3
@@ -103,7 +105,49 @@ class Retrain_classifier:
                     t1 = t2
                     t2 = WINDOW_LENGTH + t2
                     i = i + 1
-                    wav_file_duration = wav_file_duration - WINDOW_LENGTH_SEC 
+                    wav_file_duration = wav_file_duration - WINDOW_LENGTH_SEC
+    '''
+
+    def Prepare_audio_chunks(self, audio_files):
+
+        WINDOW_LENGTH_3sec = 3
+        WINDOW_LENGTH_5sec = 5
+        WINDOW_LENGTH_10sec = 10
+
+        audio_file = AudioSegment.from_file(audio_files)
+        wav_file_duration = int(audio_file.duration_seconds)
+
+        i = 0
+        t1 = 0
+        t2 = 0
+        WINDOW_LENGTH = 0
+        WINDOW_LENGTH_SEC = 0
+
+        if wav_file_duration >= 60: #checking if the audio length is atleast 1 min
+            while wav_file_duration > 0: #loop until audio file length is 5 seconds
+
+                if i < 3:
+                    if i == 0:
+                        t2 = WINDOW_LENGTH_3sec*1000
+                    WINDOW_LENGTH = 3*1000
+                    WINDOW_LENGTH_SEC = 3
+                elif i >= 3 and i < 6:
+                    WINDOW_LENGTH = 5*1000
+                    WINDOW_LENGTH_SEC = 5
+                elif i >= 6 and i < 9:
+                    WINDOW_LENGTH = 10*1000
+                    WINDOW_LENGTH_SEC = 10
+                else:
+                    break
+
+                new_file = audio_file[t1:t2]
+                audio_file_name = self.label+'_'+str(i)+'.wav'
+                audio_file_name = os.path.join(self.Retrain_folder, audio_file_name)
+                new_file.export(audio_file_name, format="wav")
+                t1 = t2
+                t2 = WINDOW_LENGTH + t2
+                i = i + 1
+                wav_file_duration = wav_file_duration - WINDOW_LENGTH_SEC
 
     def Update_embeddings(self):
 
@@ -119,8 +163,10 @@ class Retrain_classifier:
             
             self.Embeddings_list.append(Embeddings_dictionary)
 
-        pickle.dump(self.Embeddings_list, open(self.ML_embeddings, 'wb'))
+        #pickle.dump(self.Embeddings_list, open(self.ML_embeddings, 'wb'))
+        pickle.dump(self.Embeddings_list, open("./embeddings/nemo_large_model_enrollment_embeddings.pkl", 'wb'))
 
+    '''
     def Prepare_data_for_training(self):
 
         Embeddings_list = pickle.load(open(self.ML_embeddings, 'rb'))
@@ -130,7 +176,7 @@ class Retrain_classifier:
 
         X_train, X_test, Y_train, Y_test = train_test_split(ML_embeddings_data, 
                                                     ML_embeddings_data['Speaker labels'],
-                                                    test_size=0.9,
+                                                    test_size=0.1,
                                                     random_state=0)
 
         self.X_train = X_train.reset_index(drop=True)
@@ -157,6 +203,7 @@ class Retrain_classifier:
         predictions = KNN_classifier_auto.predict(self.X_test["Speaker embeddings"].tolist())
 
         return np.round(accuracy_score(self.X_test['Speaker labels'], predictions)*100, 2)
+    '''
 
     def Prepare_audio_chunks_of_zip_file(self):
 
@@ -177,20 +224,20 @@ class Retrain_classifier:
 
         self.Prepare_audio_chunks(self.wav_file)
         self.Update_embeddings()
-        self.Prepare_data_for_training()
-        self.Train_novelty_detector()
-        accuracy = self.Train_speaker_classifier()
-        self.Delete_training_files()
+        #self.Prepare_data_for_training()
+        #self.Train_novelty_detector()
+        #accuracy = self.Train_speaker_classifier()
+        #self.Delete_training_files()
 
-        return accuracy
+        #return accuracy
 
     def Retrain_classifiers_for_zip_audio(self):
 
         self.Prepare_audio_chunks_of_zip_file()
         self.Update_embeddings()
-        self.Prepare_data_for_training()
-        self.Train_novelty_detector()
-        accuracy = self.Train_speaker_classifier()
-        self.Delete_training_files()
+        #self.Prepare_data_for_training()
+        #self.Train_novelty_detector()
+        #accuracy = self.Train_speaker_classifier()
+        #self.Delete_training_files()
 
-        return accuracy
+        #return accuracy
