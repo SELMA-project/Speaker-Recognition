@@ -26,13 +26,10 @@ COPY diarization diarization
 COPY embeddings embeddings
 COPY models models
 COPY examples examples
-COPY final_results final_results
 COPY retrain_classifier retrain_classifier
 COPY SpeakerRecWebservice.py ./
 COPY StartWebService.sh ./
 
 EXPOSE 9002/tcp
-HEALTHCHECK \
-  CMD python -c 'import requests; \
-      requests.post("http://localhost:9002/Speaker_ID").raise_for_status()'
+
 ENTRYPOINT ["./StartWebService.sh"]
