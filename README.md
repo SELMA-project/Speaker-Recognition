@@ -62,4 +62,4 @@ Once container is built, execute the following command.
 docker run -d -p 9002:9002 "container id"
 ```
 
-The webservice will be accessible under: http://nm-harmonia:9002/Speaker_ID/
+The webservice can be accessed under: localhost:9002/Speaker_ID/
