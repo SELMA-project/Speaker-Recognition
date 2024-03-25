@@ -13,49 +13,23 @@ import os
 import pickle
 import shutil
 import glob
-import yt_dlp
+import torch
 
-from diarization.src.diarization import Pipeline
 from retrain_classifier.Retrain_classifier import Retrain_classifier
 from nemo.collections.asr.models import EncDecSpeakerLabelModel
 
-import torch
 import asyncio
 
-class Speaker_Diarization_Recognition:
+class Speaker_Recognition:
     def __init__(self):
         
-        self.embedding_model = EncDecSpeakerLabelModel.from_pretrained(model_name="titanet_large", map_location="cpu")
-        #self.classifier_path = "./models/KNN_auto_classifier.pkl"
-        #self.classifier = pickle.load(open(self.classifier_path, 'rb'))
-        #self.novel_detection_model_path = "./models/Local_Outlier_Filter.pkl"
-        #self.novel_speaker_detector = pickle.load(open(self.novel_detection_model_path, 'rb'))
-        self.rttm_path = str()
+        self.device = "cpu" #Device on which the computations happen
+        self.embedding_model = EncDecSpeakerLabelModel.from_pretrained(model_name="titanet_large", map_location=self.device)
         self.temp_folder = "./temp_folder"
         os.makedirs(self.temp_folder, exist_ok = True)
         self.final_results = "./final_results"
         os.makedirs(self.final_results, exist_ok = True)
-        self.speaker_recognition_results = os.path.join(self.final_results, "speaker_recognition_results.pkl")
-        self.Enrollment_embeddings = pickle.load(open("./embeddings/nemo_large_model_enrollment_embeddings.pkl", 'rb'))
-        
-    def Download_video_from_youtube(self, url):
-    
-        ydl_opts = {
-                'format': 'm4a/bestaudio/best',
-                # ℹ️ See help(yt_dlp.postprocessor) for a list of available Postprocessors and their arguments
-                'postprocessors': [{  # Extract audio using ffmpeg
-                    'key': 'FFmpegExtractAudio',
-                    'preferredcodec': 'wav',
-                }]
-            }
-
-        with yt_dlp.YoutubeDL(ydl_opts) as ydl:
-            Video_info = ydl.download(url)
-
-        audio_file_source = "./"
-        audio_file = glob.glob("%s/*.wav"%audio_file_source)
-        
-        return audio_file[0]
+        self.Enrollment_embeddings = pickle.load(open("./embeddings/nemo_large_model_embeddings.pkl", 'rb'))
 
     def Process_audio_file(self, audio_file):
 
@@ -63,28 +37,23 @@ class Speaker_Diarization_Recognition:
         dest_audio = AudioSegment.from_file(audio_file)
         dest_audio = dest_audio.set_frame_rate(16000)
         dest_audio = dest_audio.set_channels(1)
+        wav_file_duration = int(dest_audio.duration_seconds)
+        if wav_file_duration >= 5:
+            dest_audio = dest_audio[0:5000]
         dest_audio.export(dest_audio_file, format="wav")
 
         return dest_audio_file
 
-    def Perform_diarization(self, wav_file):
+    def Perform_speaker_recognition(self, wav_file):
 
-        diarizer = Pipeline.init_from_wav(wav_file)
-        self.rttm_path = diarizer.write_to_RTTM("./temp_results")
-
-    '''
-    def get_label(self, wav_file):
-
-        embeddings = self.embedding_model.get_embedding(wav_file).squeeze().numpy()
-
-        label = self.classifier.predict([embeddings])
+        label = self.Extract_labels(wav_file)
 
         return label
-    '''
-    def get_label(self, wav_file):
+    
+    def Extract_labels(self, wav_file, i=0):
 
         test_embedding = self.embedding_model.get_embedding(wav_file).squeeze().cpu().numpy()
-            
+
         known_label_list = []
 
         for enroll_embeddings in self.Enrollment_embeddings:
@@ -96,11 +65,11 @@ class Speaker_Diarization_Recognition:
             similarity_score = torch.dot(X, Y) / ((torch.dot(X, X) * torch.dot(Y, Y)) ** 0.5)
             similarity_score = (similarity_score + 1) / 2
 
-            if similarity_score >= 0.81:
+            if similarity_score >= 0.80:
                 known_label_list.append(enroll_embeddings["label"])
 
         if len(known_label_list) == 0:
-            label = "Unknown Speaker"
+            label = "Unknown Speaker / Reporter / VoiceOver"
         else:
             label = known_label_list[0]
             if "Wolfganag" in label:
@@ -108,165 +77,23 @@ class Speaker_Diarization_Recognition:
         
         return label
 
-    def Perform_speaker_recognition(self, wav_file):
-
-        audio_file = AudioSegment.from_file(wav_file)
-
-        recognized_list = []
-
-        with open(self.rttm_path, 'r') as rt_dia:
-            rt_dia_lines = rt_dia.readlines()
-
-            i = 0
-            for rt_lines in rt_dia_lines:
-                recognized = {}
-                rt_data = rt_lines.split()
-
-                start_time = float(rt_data[3])
-                end_time = start_time + float(rt_data[4])
-
-                start_sample = int(start_time) * 1000 #convert to milliseconds
-                end_sample = int(end_time) * 1000 #convert to milliseconds
-
-                audio_chunk_file_name = "sample_"+str(i)+".wav"
-                audio_chunk_file_name = os.path.join(self.temp_folder, audio_chunk_file_name)
-                audio_chunk = audio_file[start_sample:end_sample]
-                if int(audio_chunk.duration_seconds) >= 5:
-                    audio_chunk = audio_chunk[0:5000]
-                audio_chunk.export(audio_chunk_file_name, format="wav")
-
-                if float(audio_chunk.duration_seconds) <= 1.0:
-                    label = "Not enough audio for recognition"
-                #elif self.Novel_speaker_detection(audio_chunk_file_name) == -1:
-                #    label = ["Unknown Speaker"]
-                else:
-                    label = self.get_label(audio_chunk_file_name)
-
-                i = i + 1
-                recognized["start time"] = start_time
-                recognized["end time"] = end_time
-                recognized["speaker label"] = label
-
-                recognized_list.append(recognized)
-        
-        pickle.dump(recognized_list, open(self.speaker_recognition_results, 'wb'))
-
-        return recognized_list
-    '''
-    def Extract_labels(self, wav_file):
-
-        #audio_file = AudioSegment.from_file(wav_file)
-        #print(self.Novel_speaker_detection(wav_file))
-        if str(self.Novel_speaker_detection(wav_file)) == str(-1):
-            label = "Unknown Speaker"
-            return label
-        else:
-            label = self.get_label(wav_file)
-            return label[0]
-    '''
-    def Extract_labels(self, wav_file):
-        audio_file = AudioSegment.from_file(wav_file)
-        audio_chunk_file_name = "sample.wav"
-        audio_chunk_file_name = os.path.join(self.temp_folder, audio_chunk_file_name)
-        if int(audio_file.duration_seconds) >= 5:
-            audio_file = audio_file[0:5000]
-        audio_file.export(audio_chunk_file_name, format="wav")
-
-        label = self.get_label(audio_chunk_file_name)
-
-        return label
-        
-    '''
-    def Novel_speaker_detection(self, wav_file):
-
-        embeddings = self.embedding_model.get_embedding(wav_file).squeeze().numpy()
-
-        novel = self.novel_speaker_detector.predict([embeddings])
-
-        return novel[0]
-    '''
-
-    def Perform_dia_rec(self, wav_file):
+    def Perform_rec(self, wav_file):
         
         wav_file = self.Process_audio_file(wav_file)
-        self.Perform_diarization(wav_file)
-        dia_rec_info = self.Perform_speaker_recognition(wav_file)
-        self.Delete_local_files()
+        rec_info = self.Perform_speaker_recognition(wav_file)
         
-        return dia_rec_info
-
-    def Delete_local_files(self):
-
-        audio_file_source = "./"
-        audio_file = glob.glob("%s/*.wav"%audio_file_source)
-
-        if len(audio_file) == 1:
-            os.remove(audio_file[0])
-
-        shutil.copy2(self.rttm_path, self.final_results)
-        shutil.rmtree(self.temp_folder)
-        shutil.rmtree("./temp_results")
+        return rec_info
         
 app = FastAPI()
-Dia_Rec = Speaker_Diarization_Recognition()
+Spk_Rec = Speaker_Recognition()
 
-# Combining both yutube and audio
-title = "German Bundestag Speaker Identification Service"
-
-examples_audio = [
-    ["./examples/tagesschau02092019.wav"],
-]
-
-examples_url = [
-    ["https://www.youtube.com/watch?v=E1q0yIW0O74"],
-]
-
-def Perform_Audio_dia_rec(audio_file):
-
-    json_data = Dia_Rec.Perform_dia_rec(audio_file)
-
-    return json_data
-
-def Perform_Youtube_dia_rec(url):
-    
-    wav_file = Dia_Rec.Download_video_from_youtube(url)
-    json_data = Dia_Rec.Perform_dia_rec(wav_file)
-    
-    return json_data
-
-async def Audio_Video_dia_rec(audio_file, url):
-
-    if audio_file is not None:
-        json_data = Perform_Audio_dia_rec(audio_file)
-    else:
-        json_data = Perform_Youtube_dia_rec(url)
-
-    return json_data
-
-Audio_Video = gr.Blocks()
-
-with Audio_Video:
-    gr.Markdown("### This system is trained over a pre-trained Nemo-TitaNet model and K-Nearest Neighbours model.")
-    gr.Markdown("### Speaker Recognition Service for YouTube Videos or Audio files that are already downloaded from YouTube.\
-                Provide either the YouTube url or the downloaded audio.")
-    with gr.Row():
-        with gr.Column(scale=1, min_width=280):
-            YouTube_url = gr.Textbox(label="Link to YouTube URL")
-            audio_input = gr.inputs.Audio(label="Input Audio", type="filepath")
-            submit_button = gr.Button("Submit", variant="primary")
-            gr.Examples(examples=examples_url, inputs=YouTube_url)
-            gr.Examples(examples=examples_audio, inputs=audio_input)
-        with gr.Column(scale=2, min_width=280):
-            result_output = gr.JSON(label="Speaker information based on start and end time of segments")
-    submit_button.click(Audio_Video_dia_rec, inputs=[audio_input, YouTube_url], outputs=result_output)
-    
-Audio_Video.queue(concurrency_count=20)    
+#Audio_Video.queue(concurrency_count=20)    
 # Tryout audio snippets
-#title = "German Bundestag Speaker Identification Service"
+title = "German Bundestag Speaker Identification Service"
 description = "This system is trained over a pre-trained Nemo-TitaNet model."
 
-audio_input = gr.inputs.Audio(label="Input Audio", type="filepath")
-result_output = gr.outputs.Textbox(label="Speaker ID")
+audio_input = gr.Audio(label="Input Audio", type="filepath")
+result_output = gr.Textbox(label="Speaker ID")
 
 examples = [
     ["./examples/Olaf_Scholz.wav"],
@@ -279,8 +106,8 @@ examples = [
 ]
 
 io_audio_sample = gr.Interface(
-    fn=Dia_Rec.Extract_labels,
-    #title=title,
+    fn=Spk_Rec.Perform_rec,
+    title=title,
     description=description,
     examples=examples,
     inputs=audio_input,
@@ -293,21 +120,21 @@ io_audio_sample = gr.Interface(
 def Speaker_classifier_retrain(audio_file=None, label=str(), audio_zip_files=None):
     Retrain = Retrain_classifier(audio_file, label, audio_zip_files)
     if audio_zip_files is not None:
-        accuracy = Retrain.Retrain_classifiers_for_zip_audio()
+        Retrain.Retrain_classifiers_for_zip_audio()
     else:
-        accuracy = Retrain.Retrain_classifiers_for_single_audio()
+        Retrain.Retrain_classifiers_for_single_audio()
 
-    return f"Training is completed and model is updated" #with accuracy score of {accuracy}%"
+    return f"Training is completed and the models are updated"
 
 title = "Add New Speaker(s) to Speaker Identification Service"
 description = "To add new speaker(s), upload a single audio file with minimum 2 mins (for better recognition) \
                along with the speaker label. If more speakers needs to be added, add a zip file containing \
                multiple audio files named with respective speaker labels"
 
-audio_file_input = gr.inputs.Audio(label="Input Audio for training (minimum of 2 minutes duration)", type="filepath")
-label_name = gr.inputs.Textbox(label="Speaker label for training")
+audio_file_input = gr.Audio(label="Input Audio for training (minimum of 2 minutes duration)", type="filepath")
+label_name = gr.Textbox(label="Speaker label for training")
 audio_zip_file_input = gr.File(label="Zip file with audio files named with speaker labels")
-result_output = gr.outputs.Textbox(label="Training Results")
+result_output = gr.Textbox(label="Training Results")
 
 
 add_new_speakers = gr.Interface(
@@ -328,16 +155,11 @@ add_new_speakers = gr.Interface(
 #                               ["Speaker Dia Rec", "YouTube Speaker Rec", "Infer Audio Sample", "Add New Speakers"])
 title = "German Bundestag Speaker Identification Service"
 
-App_Mount = gr.TabbedInterface([Audio_Video, io_audio_sample, add_new_speakers],
-                               ["Speaker DiaRec", "Infer Audio Sample", "Add New Speakers"],
+App_Mount = gr.TabbedInterface([io_audio_sample, add_new_speakers],
+                               ["Infer Audio Sample", "Add New Speakers"],
                                title=title)
 
 #App_Mount.queue()
 CUSTOM_PATH = "/Speaker_ID"
 #if __name__ == "__main__":
 app = gr.mount_gradio_app(app, App_Mount, path=CUSTOM_PATH)
-
-    
-
-    
-    

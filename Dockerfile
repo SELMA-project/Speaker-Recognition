@@ -1,35 +1,32 @@
-FROM python:3.9-slim
+FROM python:3.8-slim
 
-ARG REVISION=unknown
-LABEL Revision=$REVISION
-
-RUN export DEBIAN_FRONTEND=noninteractive \
-  && apt-get -qq update \
-  && apt-get -qq upgrade \
-  && apt-get -qq install --no-install-recommends \
-    g++ \
-  && rm -rf /var/lib/apt/lists/*
+ENV PYTHONUNBUFFERED 1
+ENV PYTHONDONTWRITEBYTECODE 1
+ENV PYTHONIOENCODING=utf-8
 
 RUN export DEBIAN_FRONTEND=noninteractive \
+    && echo 'deb-src http://deb.debian.org/debian bullseye main' \
+    >> /etc/apt/sources.list \
     && apt-get -qq update \
-    && apt-get -qq dist-upgrade \
+    && apt-get -qq upgrade \
     && apt-get -qq install -y --no-install-recommends \
-        ffmpeg
-
+      g++ \
+      ffmpeg \
+      libsndfile1 \
+    && rm -rf /var/lib/apt/lists/*
 
 WORKDIR /data
 COPY requirements.txt requirements.txt
+RUN pip install --upgrade pip
 RUN pip install --no-cache-dir -r requirements.txt
-RUN pip install nemo-toolkit[asr]==1.17.0
 
-COPY diarization diarization
 COPY embeddings embeddings
-COPY models models
 COPY examples examples
+COPY final_results final_results
 COPY retrain_classifier retrain_classifier
 COPY SpeakerRecWebservice.py ./
 COPY StartWebService.sh ./
 
-EXPOSE 9002/tcp
+EXPOSE 9002
 
 ENTRYPOINT ["./StartWebService.sh"]
