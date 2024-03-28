@@ -29,7 +29,6 @@ class Speaker_Recognition:
         os.makedirs(self.temp_folder, exist_ok = True)
         self.final_results = "./final_results"
         os.makedirs(self.final_results, exist_ok = True)
-        self.Enrollment_embeddings = pickle.load(open("./embeddings/nemo_large_model_embeddings.pkl", 'rb'))
 
     def Process_audio_file(self, audio_file):
 
@@ -52,11 +51,13 @@ class Speaker_Recognition:
     
     def Extract_labels(self, wav_file, i=0):
 
+        Enrollment_embeddings = pickle.load(open("./embeddings/nemo_large_model_embeddings.pkl", 'rb'))
+
         test_embedding = self.embedding_model.get_embedding(wav_file).squeeze().cpu().numpy()
 
         known_label_list = []
 
-        for enroll_embeddings in self.Enrollment_embeddings:
+        for enroll_embeddings in Enrollment_embeddings:
 
             # Length Normalize
             X = torch.from_numpy(test_embedding) / torch.linalg.norm(torch.from_numpy(test_embedding))
@@ -83,6 +84,32 @@ class Speaker_Recognition:
         rec_info = self.Perform_speaker_recognition(wav_file)
         
         return rec_info
+
+    def delete_speaker(self, speaker_name):
+
+        updated_embeddings = []
+
+        for speaker_info in speakers:
+
+            if speaker_name != speaker_info["label"]:
+
+                updated_embeddings.append(speaker_info)
+
+        pickle.dump(updated_embeddings, open("./embeddings/nemo_large_model_embeddings.pkl", 'wb'))
+
+        return "Speaker deleted and models are updated!"
+
+    def speaker_list_update(self):
+
+        list_of_speakers = []
+
+        speakers = pickle.load(open("./embeddings/nemo_large_model_embeddings.pkl", 'rb'))
+
+        list_of_speakers = [speaker["label"] for speaker in speakers]
+
+        list_of_speakers = list(set(list_of_speakers))
+
+        return gr.Dropdown(choices=list_of_speakers)
         
 app = FastAPI()
 Spk_Rec = Speaker_Recognition()
@@ -117,37 +144,61 @@ io_audio_sample = gr.Interface(
 )
 
 # Add new speakers
-def Speaker_classifier_retrain(audio_file=None, label=str(), audio_zip_files=None):
+def Speaker_classifier_retrain_single_audio(audio_file=None, label=str(), audio_zip_files=None):
     Retrain = Retrain_classifier(audio_file, label, audio_zip_files)
-    if audio_zip_files is not None:
-        Retrain.Retrain_classifiers_for_zip_audio()
-    else:
-        Retrain.Retrain_classifiers_for_single_audio()
+    
+    Retrain.Retrain_classifiers_for_single_audio()
 
     return f"Training is completed and the models are updated"
 
-title = "Add New Speaker(s) to Speaker Identification Service"
-description = "To add new speaker(s), upload a single audio file with minimum 2 mins (for better recognition) \
-               along with the speaker label. If more speakers needs to be added, add a zip file containing \
-               multiple audio files named with respective speaker labels"
+def Speaker_classifier_retrain_zip_files(audio_zip_files=None, audio_file=None, label=str()):
+    Retrain = Retrain_classifier(audio_file, label, audio_zip_files)
+    
+    Retrain.Retrain_classifiers_for_zip_audio()
 
-audio_file_input = gr.Audio(label="Input Audio for training (minimum of 2 minutes duration)", type="filepath")
-label_name = gr.Textbox(label="Speaker label for training")
-audio_zip_file_input = gr.File(label="Zip file with audio files named with speaker labels")
-result_output = gr.Textbox(label="Training Results")
+    return f"Training is completed and the models are updated"
 
 
-add_new_speakers = gr.Interface(
-    fn=Speaker_classifier_retrain,
-    title=title,
-    description=description,
-    #article=article,
-    #examples=examples,
-    inputs=[audio_file_input, label_name, audio_zip_file_input],
-    outputs=result_output,
-    allow_flagging="never",
-    css="footer {visibility: hidden}",
-)
+add_new_speakers = gr.Blocks()
+with add_new_speakers:
+    gr.Markdown("# Add New Speaker(s) to Speaker Identification Service")
+    gr.Markdown("## To add new speaker(s), upload a single audio file with minimum 2 mins (for better recognition) \
+               along with the speaker label.")
+    audio_file_input = gr.Audio(label="Input Audio for training (minimum of 2 minutes duration)", type="filepath")
+    label_name = gr.Textbox(label="Speaker label for training")
+    submit_button_1 = gr.Button("Submit", variant="primary")
+    training_output_1 = gr.Textbox(label="training status")
+    submit_button_1.click(Speaker_classifier_retrain_single_audio, inputs=[audio_file_input, label_name], outputs=training_output_1)
+    gr.Markdown("## If more speakers needs to be added, add a zip file containing \
+               multiple audio files named with respective speaker labels. Just upload the zip file and models will be updated automatically.")
+    zip_files = gr.File(label="Zip file with audio files named with speaker labels", file_types=["file"], type="filepath")
+    training_output_2 = gr.Textbox(label="training status")
+    zip_files.upload(Speaker_classifier_retrain_zip_files, inputs=zip_files, outputs=training_output_2)
+
+# )
+
+# Delete speaker tab
+list_of_speakers = []
+
+speakers = pickle.load(open("./embeddings/nemo_large_model_embeddings.pkl", 'rb'))
+
+list_of_speakers = [speaker["label"] for speaker in speakers]
+
+list_of_speakers = list(set(list_of_speakers))
+
+delete_speaker_demo = gr.Blocks()
+
+with delete_speaker_demo:
+    gr.Markdown("# Delete speaker")
+    gr.Markdown("## Delete a selected speaker")
+    dropdown = gr.Dropdown(list_of_speakers, label="List of known speakers", info="Select a speaker to delete from the model")
+    submit_button = gr.Button("Submit", variant="primary")
+    training_output = gr.Textbox(label="training status")
+    gr.Markdown("### Clear button updates the dropdown list")
+    clear_button = gr.Button("Clear", variant="primary")
+    submit_button.click(Spk_Rec.delete_speaker, inputs=dropdown, outputs=training_output)
+    clear_button.click(Spk_Rec.speaker_list_update, outputs=dropdown)
+
 
 # Gradio Fast api mount
 
@@ -155,8 +206,8 @@ add_new_speakers = gr.Interface(
 #                               ["Speaker Dia Rec", "YouTube Speaker Rec", "Infer Audio Sample", "Add New Speakers"])
 title = "German Bundestag Speaker Identification Service"
 
-App_Mount = gr.TabbedInterface([io_audio_sample, add_new_speakers],
-                               ["Infer Audio Sample", "Add New Speakers"],
+App_Mount = gr.TabbedInterface([io_audio_sample, add_new_speakers, delete_speaker_demo],
+                               ["Infer Audio Sample", "Add New Speakers", "Delete Speaker From Model"],
                                title=title)
 
 #App_Mount.queue()

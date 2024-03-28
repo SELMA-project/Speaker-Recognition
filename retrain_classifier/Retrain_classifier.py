@@ -47,7 +47,7 @@ class Retrain_classifier:
         WINDOW_LENGTH = 0
         WINDOW_LENGTH_SEC = 0
 
-        if wav_file_duration >= 60: #checking if the audio length is atleast 1 min
+        if wav_file_duration >= 30: #checking if the audio length is atleast 1 min
             if wav_file_duration >= 300: #limiting audio length to 5 mins
                 audio_file = audio_file[0:300000]
                 wav_file_duration = int(audio_file.duration_seconds)
@@ -66,8 +66,14 @@ class Retrain_classifier:
                         break
 
                     new_file = audio_file[t1:t2]
-                    audio_file_name = self.label+'_'+str(i)+'.wav'
-                    audio_file_name = os.path.join(self.Retrain_folder, audio_file_name)
+                    if len(self.label) > 0:
+                        audio_label = self.label
+                    else:
+                        audio_label = audio_files.split("/")[-1].split(".")[0]
+                    audio_file_name = audio_label+'_'+str(i)+'.wav'
+                    audio_folder = os.path.join(self.Retrain_folder, audio_label)
+                    os.makedirs(audio_folder, exist_ok = True)
+                    audio_file_name = os.path.join(audio_folder, audio_file_name)
                     new_file.export(audio_file_name, format="wav")
 
                     t1 = t2
@@ -90,8 +96,14 @@ class Retrain_classifier:
                         break
 
                     new_file = audio_file[t1:t2]
-                    audio_file_name = self.label+'_'+str(i)+'.wav'
-                    audio_file_name = os.path.join(self.Retrain_folder, audio_file_name)
+                    if len(self.label) > 0:
+                        audio_label = self.label
+                    else:
+                        audio_label = audio_files.split("/")[-1].split(".")[0]
+                    audio_file_name = audio_label+'_'+str(i)+'.wav'
+                    audio_folder = os.path.join(self.Retrain_folder, audio_label)
+                    os.makedirs(audio_folder, exist_ok = True)
+                    audio_file_name = os.path.join(audio_folder, audio_file_name)
                     new_file.export(audio_file_name, format="wav")
                     t1 = t2
                     t2 = WINDOW_LENGTH + t2
@@ -100,10 +112,10 @@ class Retrain_classifier:
 
     def Update_embeddings(self):
 
-        new_audio_files = glob.glob("%s/*.wav"%self.Retrain_folder)
+        new_audio_files = glob.glob("%s/*/*.wav"%self.Retrain_folder)
 
         for wav_file in new_audio_files:
-            
+
             Embeddings_dictionary = {}
             label = wav_file.split("/")[-2]
             Embeddings_dictionary['label'] = label
