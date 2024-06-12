@@ -5,20 +5,14 @@ The pipeline performs speaker recognition in a single command. Here, unknown spe
                
 ## Dataset Information
 
-Dataset is an inhouse dataset consisting of over 392 Bundestag speakers with varying speaker duration from 30 seconds to 45 minutes.
+Dataset is an in-house dataset consisting of over 392 Bundestag speakers with varying speaker duration from 30 seconds to 45 minutes.
 
 Here we have selected 358 speakers based on the duration ranging from 10 mins of data to the maximum duration available in the dataset.
 
-Dataset link: /nm-raid/audio/work/mturan/Bundestag_speaker_data/Recognition/
-
 ## List of Speakers
-Here are the list of 358 speakers: [list of speakers](list_of_speakers.txt)
+Here is the list of 358 speakers: [list of speakers](list_of_speakers.txt)
 
 ## Model Performance
-
-Test set: is based on the video data collected for IBC demo.
-
-Test set location: /nm-raid/audio/work/shikkalven/SELMA/SpkRecBenchmark/DE_TestSet
 
 Test samples: 2751 test segments
 
@@ -30,10 +24,10 @@ Model Accuracy: 96.55%
 
 # Webservice Usage
 
-For the front end of the webservice FastApi and Gradio is used.
+For the front end of the webservice FastApi and Gradio are used.
 
 ## Terminal Usage
-To run the webservice from the terminal along with a browser use below command:
+To run the webservice from the terminal along with a browser use the below command:
 
 ```
 uvicorn --host 0.0.0.0 --port 9002 SpeakerRecWebservice:app
@@ -43,7 +37,7 @@ uvicorn --host 0.0.0.0 --port 9002 SpeakerRecWebservice:app
 
 The webservice has two tabs in it and are as follows:
 
-1. Infer Audio Sample - Here aduio chunks can be uploaded and speaker labels can be inferred.
+1. Infer Audio Sample - Here audio chunks can be uploaded and speaker labels can be inferred.
 
 2. Add New Speakers - Here new speakers can be added to the existing model. Either a single speaker or a set of speakers can be added.
     - Single Speaker: upload audio file and the speaker label to add a single speaker.
@@ -62,4 +56,4 @@ Once container is built, execute the following command.
 docker run -d -p 9002:9002 "container id"
 ```
 
-The webservice can be accessed under: localhost:9002/Speaker_ID/
+The webservice can be accessed here: localhost:9002/Speaker_ID/
